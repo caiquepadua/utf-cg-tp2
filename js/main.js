@@ -14,13 +14,58 @@ const texturas = twgl.createTextures(gl, {
 });
 
 const RAIO_MUNDO = 8;
+const ALVO_CAMERA = [0, 0, 0];
 
 let luzLigada = true;
+let cameraAtiva = 1;
+
+const cameras = {
+  1: { azimute: 0, elevacao: Math.PI / 4, distancia: 22 },
+  2: { azimute: 0.8, elevacao: 0.6, distancia: 22 },
+};
+
+function limitar(valor, minimo, maximo) {
+  return Math.min(Math.max(valor, minimo), maximo);
+}
+
+function posicaoDaCamera(cam) {
+  const raioHorizontal = cam.distancia * Math.cos(cam.elevacao);
+  return [
+    ALVO_CAMERA[0] + raioHorizontal * Math.sin(cam.azimute),
+    ALVO_CAMERA[1] + cam.distancia * Math.sin(cam.elevacao),
+    ALVO_CAMERA[2] + raioHorizontal * Math.cos(cam.azimute),
+  ];
+}
+
 window.addEventListener("keydown", (evento) => {
-  if (evento.key === "l" || evento.key === "L") {
-    luzLigada = !luzLigada;
-  }
+  if (evento.key === "l" || evento.key === "L") luzLigada = !luzLigada;
+  if (evento.key === "1") cameraAtiva = 1;
+  if (evento.key === "2") cameraAtiva = 2;
 });
+
+let arrastando = false;
+canvas.addEventListener("mousedown", () => {
+  arrastando = true;
+});
+window.addEventListener("mouseup", () => {
+  arrastando = false;
+});
+window.addEventListener("mousemove", (evento) => {
+  if (!arrastando || cameraAtiva !== 2) return;
+  const cam = cameras[2];
+  cam.azimute -= evento.movementX * 0.005;
+  cam.elevacao = limitar(cam.elevacao + evento.movementY * 0.005, 0.05, 1.5);
+});
+
+canvas.addEventListener(
+  "wheel",
+  (evento) => {
+    evento.preventDefault();
+    const cam = cameras[cameraAtiva];
+    cam.distancia = limitar(cam.distancia + evento.deltaY * 0.02, 8, 40);
+  },
+  { passive: false }
+);
 
 function material(cor, especular, brilho, textura = texturas.branca) {
   return {
@@ -39,6 +84,8 @@ const materiais = {
   copa: material([0.1, 0.4, 0.2], 0.1, 10),
   pedra: material([1, 1, 1], 0.4, 32, texturas.pedra),
   boneco: material([0.95, 0.95, 1], 0.3, 24),
+  fio: material([0.6, 0.6, 0.65], 0.2, 16),
+  gelo: material([0.85, 0.95, 1], 0.7, 64),
 };
 
 async function carregarTexto(url) {
@@ -57,6 +104,7 @@ async function iniciar() {
     cilindro: twgl.primitives.createCylinderBufferInfo(gl, 1, 1, 16, 1),
     cone: twgl.primitives.createTruncatedConeBufferInfo(gl, 1, 0, 1, 16, 1),
     esfera: twgl.primitives.createSphereBufferInfo(gl, 1, 24, 16),
+    cubo: twgl.primitives.createCubeBufferInfo(gl, 1),
   };
 
   function desenhar(forma, modelo, mat) {
@@ -98,11 +146,56 @@ async function iniciar() {
     }
   }
 
+  function desenharMobile(x, z, tempo) {
+    const ALTURA_POSTE = 5;
+    const COMPRIMENTO_BRACO = 2.2;
+    const COMPRIMENTO_FIO = 0.9;
+
+    const base = m4.translation([x, 0, z]);
+
+    let poste = m4.translate(base, [0, ALTURA_POSTE / 2, 0]);
+    poste = m4.scale(poste, [0.12, ALTURA_POSTE, 0.12]);
+    desenhar(formas.cilindro, poste, materiais.tronco);
+
+    const topo = m4.translate(base, [0, ALTURA_POSTE, 0]);
+    const giratorio = m4.rotateY(topo, tempo * 0.6);
+
+    for (let i = 0; i < 4; i++) {
+      const braco = m4.rotateY(giratorio, (i * Math.PI) / 2);
+
+      let barra = m4.translate(braco, [COMPRIMENTO_BRACO / 2, 0, 0]);
+      barra = m4.rotateZ(barra, Math.PI / 2);
+      barra = m4.scale(barra, [0.06, COMPRIMENTO_BRACO, 0.06]);
+      desenhar(formas.cilindro, barra, materiais.tronco);
+
+      const pontaDoBraco = m4.translate(braco, [COMPRIMENTO_BRACO, 0, 0]);
+
+      let fio = m4.translate(pontaDoBraco, [0, -COMPRIMENTO_FIO / 2, 0]);
+      fio = m4.scale(fio, [0.015, COMPRIMENTO_FIO, 0.015]);
+      desenhar(formas.cilindro, fio, materiais.fio);
+
+      let floco = m4.translate(pontaDoBraco, [0, -COMPRIMENTO_FIO, 0]);
+      floco = m4.rotateY(floco, tempo * 1.5 + i);
+
+      for (let j = 0; j < 3; j++) {
+        let haste = m4.rotateZ(floco, (j * Math.PI) / 3);
+        haste = m4.scale(haste, [0.9, 0.1, 0.08]);
+        desenhar(formas.cubo, haste, materiais.gelo);
+      }
+    }
+  }
+
   gl.enable(gl.DEPTH_TEST);
 
-  const posicaoCamera = [12, 10, 16];
+  let ultimoTempo = performance.now() / 1000;
 
-  function loop() {
+  function loop(tempoMs) {
+    const tempo = tempoMs / 1000;
+    const deltaTempo = tempo - ultimoTempo;
+    ultimoTempo = tempo;
+
+    cameras[1].azimute += deltaTempo * 0.3;
+
     twgl.resizeCanvasToDisplaySize(gl.canvas);
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
     gl.clearColor(0.1, 0.1, 0.15, 1);
@@ -110,7 +203,9 @@ async function iniciar() {
 
     const aspecto = gl.canvas.width / gl.canvas.height;
     const projecao = m4.perspective(Math.PI / 4, aspecto, 0.1, 100);
-    const camera = m4.lookAt(posicaoCamera, [0, 0, 0], [0, 1, 0]);
+
+    const posicaoCamera = posicaoDaCamera(cameras[cameraAtiva]);
+    const camera = m4.lookAt(posicaoCamera, ALVO_CAMERA, [0, 1, 0]);
     const viewProjecao = m4.multiply(projecao, m4.inverse(camera));
 
     gl.useProgram(programInfo.program);
@@ -132,6 +227,7 @@ async function iniciar() {
     desenharPedra(4, 2, 0.7);
     desenharPedra(-5, 1, 0.5);
     desenharBoneco(1, -5);
+    desenharMobile(5, -1, tempo);
 
     requestAnimationFrame(loop);
   }
