@@ -1,4 +1,5 @@
 import * as twgl from "./lib/twgl-full.module.js";
+import { carregarObj } from "./obj.js";
 
 const m4 = twgl.m4;
 twgl.setDefaults({ attribPrefix: "a_" });
@@ -11,6 +12,9 @@ const texturas = twgl.createTextures(gl, {
   neve: { src: "assets/textures/neve.png" },
   casca: { src: "assets/textures/casca.png" },
   pedra: { src: "assets/textures/pedra.png" },
+  mamoCorpo: { src: "assets/textures/Mammoo_bodyCl_ctr.png", wrap: gl.REPEAT, flipY: 1 },
+  mamoOlho:  { src: "assets/textures/Mammoo_eyeCl_ctr.png",  wrap: gl.REPEAT, flipY: 1 },
+  mamoBoca:  { src: "assets/textures/Mammoo_mouthCl_ctr.png", wrap: gl.REPEAT, flipY: 1 },
 });
 
 const RAIO_MUNDO = 8;
@@ -18,6 +22,13 @@ const ALVO_CAMERA = [0, 0, 0];
 
 let luzLigada = true;
 let cameraAtiva = 1;
+
+const poses = [
+  { x: 0,    y: 0,   z: 0,    giroY: 0,            giroZ: 0 },            // inicial: no centro
+  { x: -5.5, y: 0,   z: 3,    giroY: Math.PI * 0.75, giroZ: 0 },          // na borda, olhando pra fora
+  { x: 0,    y: 1.8, z: 0,    giroY: 0,            giroZ: Math.PI / 2 },  // deitado de lado, dormindo
+];
+let poseAtual = 0;
 
 const cameras = {
   1: { azimute: 0, elevacao: Math.PI / 4, distancia: 22 },
@@ -41,6 +52,7 @@ window.addEventListener("keydown", (evento) => {
   if (evento.key === "l" || evento.key === "L") luzLigada = !luzLigada;
   if (evento.key === "1") cameraAtiva = 1;
   if (evento.key === "2") cameraAtiva = 2;
+  if (evento.key === "p" || evento.key === "P") poseAtual = (poseAtual + 1) % poses.length;
 });
 
 let arrastando = false;
@@ -88,6 +100,13 @@ const materiais = {
   gelo: material([0.85, 0.95, 1], 0.7, 64),
 };
 
+const materiaisMamo = {
+  BodyA: material([1, 1, 1], 0.34, 20, texturas.mamoCorpo),
+  BodyB: material([1, 1, 1], 0.34, 20, texturas.mamoCorpo),
+  Eye: material([1, 1, 1], 0.34, 20, texturas.mamoOlho),
+  Mouth: material([1, 1, 1], 0.34, 20, texturas.mamoBoca),
+};
+
 async function carregarTexto(url) {
   const resposta = await fetch(url);
   return await resposta.text();
@@ -106,6 +125,19 @@ async function iniciar() {
     esfera: twgl.primitives.createSphereBufferInfo(gl, 1, 24, 16),
     cubo: twgl.primitives.createCubeBufferInfo(gl, 1),
   };
+
+  const dadosMamo = await carregarObj("assets/models/mamoswine.obj"); // confira o nome do arquivo
+  const partesMamo = {};
+  for (const nome in dadosMamo) {
+    partesMamo[nome] = twgl.createBufferInfoFromArrays(gl, dadosMamo[nome]);
+    console.log(nome, dadosMamo[nome].position.data.length / 3, "vértices");
+  }
+
+  function desenharMamoswine(modelo) {
+    for (const nome in partesMamo) {
+      desenhar(partesMamo[nome], modelo, materiaisMamo[nome] || materiais.boneco);
+    }
+  }
 
   function desenhar(forma, modelo, mat) {
     twgl.setBuffersAndAttributes(gl, programInfo, forma);
@@ -220,6 +252,13 @@ async function iniciar() {
 
     desenhar(formas.disco, m4.identity(), materiais.neve);
     desenhar(formas.hemisferio, m4.identity(), materiais.pokebola);
+    
+    const p = poses[poseAtual];
+    let mamo = m4.translation([p.x, p.y, p.z]);
+    mamo = m4.rotateY(mamo, p.giroY);
+    mamo = m4.rotateZ(mamo, p.giroZ);
+    mamo = m4.scale(mamo, [1.2, 1.2, 1.2]);
+    desenharMamoswine(mamo);
 
     desenharPinheiro(-4, -2);
     desenharPinheiro(3, -4);
