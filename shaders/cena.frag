@@ -16,6 +16,7 @@ uniform vec3 u_difusa;
 uniform vec3 u_especular;
 uniform float u_brilho;
 uniform sampler2D u_textura;
+uniform vec2 u_repeticao;
 
 uniform bool u_neblinaLigada;
 uniform vec3 u_corNeblina;
@@ -24,7 +25,7 @@ uniform float u_densidadeNeblina;
 out vec4 corFinal;
 
 void main() {
-  vec3 texel = texture(u_textura, v_texcoord).rgb;
+  vec3 texel = texture(u_textura, v_texcoord * u_repeticao).rgb;
   vec3 cor;
 
   if (u_luzLigada) {

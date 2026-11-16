@@ -15,9 +15,10 @@ const texturas = twgl.createTextures(gl, {
   mamoCorpo: { src: "assets/textures/Mammoo_bodyCl_ctr.png", wrap: gl.REPEAT, flipY: 1 },
   mamoOlho:  { src: "assets/textures/Mammoo_eyeCl_ctr.png",  wrap: gl.REPEAT, flipY: 1 },
   mamoBoca:  { src: "assets/textures/Mammoo_mouthCl_ctr.png", wrap: gl.REPEAT, flipY: 1 },
+  iglu: { src: "assets/textures/iglu.png", wrap: gl.REPEAT },
 });
 
-const RAIO_MUNDO = 8;
+const RAIO_MUNDO = 10;
 const ALVO_CAMERA = [0, 0, 0];
 
 let luzLigada = true;
@@ -25,18 +26,99 @@ let cameraAtiva = 1;
 
 const poses = [
   { x: 0,    y: 0,   z: 0,    giroY: 0,            giroZ: 0 },            // inicial: no centro
-  { x: -5.5, y: 0,   z: 3,    giroY: Math.PI * 0.75, giroZ: 0 },          // na borda, olhando pra fora
+    { x: 0, y: 0, z: -6.5,    giroY: Math.PI,      giroZ: 0 },            // na borda, olhando pra fora
   { x: 0,    y: 1.8, z: 0,    giroY: 0,            giroZ: Math.PI / 2 },  // deitado de lado, dormindo
 ];
 let poseAtual = 0;
+
+const NOS = [
+  [0, 0], [3, 0], [1.5, 2.6], [-1.5, 2.6], [-3, 0], [-1.5, -2.6], [1.5, -2.6],
+];
+const VIZINHOS = [
+  [1, 2, 3, 4, 5, 6], // centro liga em todos
+  [0, 2, 6],
+  [0, 1, 3],
+  [0, 2, 4],
+  [0, 3, 5],
+  [0, 4, 6],
+  [0, 5, 1],
+];
+
+const VELOCIDADE = 1;      // unidades por segundo
+const VELOCIDADE_GIRO = 2.5;   // radianos por segundo
+
+const passeio = { estado: "idle", espera: 2, no: 0, caminho: [], x: 0, z: 0, giro: 0, fase: 0 };
+
+function reiniciarPasseio() {
+  Object.assign(passeio, { estado: "idle", espera: 2, no: 0, caminho: [], x: 0, z: 0, giro: 0, fase: 0 });
+}
+
+function sortearCaminho(origem) {
+  const passos = 1 + Math.floor(Math.random() * 3);
+  const caminho = [];
+  let atual = origem;
+  let anterior = -1;
+  for (let i = 0; i < passos; i++) {
+    let opcoes = VIZINHOS[atual].filter((v) => v !== anterior);
+    if (opcoes.length === 0) opcoes = VIZINHOS[atual];
+    const proximo = opcoes[Math.floor(Math.random() * opcoes.length)];
+    caminho.push(proximo);
+    anterior = atual;
+    atual = proximo;
+  }
+  return caminho;
+}
+
+function diferencaAngulo(alvo, atual) {
+  let d = alvo - atual;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  return d;
+}
+
+function atualizarPasseio(dt) {
+  if (passeio.estado === "idle") {
+    passeio.espera -= dt;
+    if (passeio.espera <= 0) {
+      passeio.caminho = sortearCaminho(passeio.no);
+      passeio.estado = "wandering";
+    }
+    return;
+  }
+
+  const alvo = NOS[passeio.caminho[0]];
+  const dx = alvo[0] - passeio.x;
+  const dz = alvo[1] - passeio.z;
+  const distancia = Math.hypot(dx, dz);
+
+  if (distancia < 0.05) {
+    passeio.no = passeio.caminho.shift();
+    if (passeio.caminho.length === 0) {
+      passeio.estado = "idle";
+      passeio.espera = 2 + Math.random() * 2;
+    }
+    return;
+  }
+
+  const giroAlvo = Math.atan2(dx, dz);
+  const diferenca = diferencaAngulo(giroAlvo, passeio.giro);
+  const passoGiro = VELOCIDADE_GIRO * dt;
+  passeio.giro += limitar(diferenca, -passoGiro, passoGiro);
+  if (Math.abs(diferenca) > 0.3) return; // vira primeiro, depois anda
+
+  const passo = Math.min(VELOCIDADE * dt, distancia);
+  passeio.x += (dx / distancia) * passo;
+  passeio.z += (dz / distancia) * passo;
+  passeio.fase += dt * 8;
+}
 
 let neblinaLigada = false;
 const DURACAO_DIA = 40; // segundos para um dia completo
 let tempoDoDia = 0.2;   // 0 a 1
 
 const cameras = {
-  1: { azimute: 0, elevacao: Math.PI / 4, distancia: 22 },
-  2: { azimute: 0.8, elevacao: 0.6, distancia: 22 },
+  1: { azimute: 0, elevacao: Math.PI / 4, distancia: 26 },
+  2: { azimute: 0.8, elevacao: 0.6, distancia: 26 },
 };
 
 function limitar(valor, minimo, maximo) {
@@ -60,7 +142,10 @@ window.addEventListener("keydown", (evento) => {
   if (evento.key === "l" || evento.key === "L") luzLigada = !luzLigada;
   if (evento.key === "1") cameraAtiva = 1;
   if (evento.key === "2") cameraAtiva = 2;
-  if (evento.key === "p" || evento.key === "P") poseAtual = (poseAtual + 1) % poses.length;
+  if (evento.key === "p" || evento.key === "P") {
+    poseAtual = (poseAtual + 1) % poses.length;
+    if (poseAtual === 0) reiniciarPasseio();
+  }
   if (evento.key === "n" || evento.key === "N") neblinaLigada = !neblinaLigada;
 });
 
@@ -88,13 +173,14 @@ canvas.addEventListener(
   { passive: false }
 );
 
-function material(cor, especular, brilho, textura = texturas.branca) {
+function material(cor, especular, brilho, textura = texturas.branca, repeticao = [1, 1]) {
   return {
     ambiente: cor.map((c) => c * 0.35),
     difusa: cor,
     especular: [especular, especular, especular],
     brilho,
     textura,
+    repeticao,
   };
 }
 
@@ -107,6 +193,8 @@ const materiais = {
   boneco: material([0.95, 0.95, 1], 0.3, 24),
   fio: material([0.6, 0.6, 0.65], 0.2, 16),
   gelo: material([0.85, 0.95, 1], 0.7, 64),
+  iglu: material([1, 1, 1], 0.5, 40, texturas.iglu, [6, 3]),
+  porta: material([0.05, 0.05, 0.08], 0, 1),
 };
 
 const materiaisMamo = {
@@ -133,6 +221,8 @@ async function iniciar() {
     cone: twgl.primitives.createTruncatedConeBufferInfo(gl, 1, 0, 1, 16, 1),
     esfera: twgl.primitives.createSphereBufferInfo(gl, 1, 24, 16),
     cubo: twgl.primitives.createCubeBufferInfo(gl, 1),
+    cupula: twgl.primitives.createSphereBufferInfo(gl, 1, 32, 16, 0, Math.PI / 2),
+    discoPequeno: twgl.primitives.createDiscBufferInfo(gl, 1, 24),
   };
 
   const dadosMamo = await carregarObj("assets/models/mamoswine.obj"); // confira o nome do arquivo
@@ -171,6 +261,7 @@ async function iniciar() {
       u_especular: mat.especular,
       u_brilho: mat.brilho,
       u_textura: mat.textura,
+      u_repeticao: mat.repeticao,
     });
     twgl.drawBufferInfo(gl, forma);
   }
@@ -198,6 +289,26 @@ async function iniciar() {
       modelo = m4.scale(modelo, [raio, raio, raio]);
       desenhar(formas.esfera, modelo, materiais.boneco);
     }
+  }
+
+  function desenharIglu(x, z, raio) {
+    const base = m4.translation([x, 0, z]);
+
+    const cupula = m4.scale(base, [raio, raio * 0.85, raio]);
+    desenhar(formas.cupula, cupula, materiais.iglu);
+
+    const anguloPraCentro = Math.atan2(-x, -z);
+    const frente = m4.rotateY(base, anguloPraCentro);
+
+    let tunel = m4.translate(frente, [0, 0, raio * 0.9]);
+    tunel = m4.rotateX(tunel, Math.PI / 2);
+    tunel = m4.scale(tunel, [0.7, 1.2, 0.7]);
+    desenhar(formas.cilindro, tunel, materiais.iglu);
+
+    let porta = m4.translate(frente, [0, 0, raio * 0.9 + 0.61]);
+    porta = m4.rotateX(porta, Math.PI / 2);
+    porta = m4.scale(porta, [0.55, 1, 0.55]);
+    desenhar(formas.discoPequeno, porta, materiais.porta);
   }
 
   function desenharMobile(x, z, tempo) {
@@ -250,15 +361,15 @@ async function iniciar() {
 
     cameras[1].azimute += deltaTempo * 0.3;
 
-  tempoDoDia = (tempoDoDia + deltaTempo / DURACAO_DIA) % 1;
-  const anguloSol = tempoDoDia * 2 * Math.PI;
-  const altura = Math.sin(anguloSol);
-  const dia = limitar(altura * 2 + 0.5, 0, 1);
+    tempoDoDia = (tempoDoDia + deltaTempo / DURACAO_DIA) % 1;
+    const anguloSol = tempoDoDia * 2 * Math.PI;
+    const altura = Math.sin(anguloSol);
+    const dia = limitar(altura * 2 + 0.5, 0, 1);
 
-  const direcaoLuz = [Math.cos(anguloSol), Math.max(altura, 0.15), 0.4];
-  const corLuz = misturar([0.25, 0.3, 0.55], [1, 0.97, 0.9], dia);
-  const luzAmbiente = misturar([0.12, 0.14, 0.25], [0.55, 0.6, 0.75], dia);
-  const corCeu = misturar([0.03, 0.04, 0.1], [0.55, 0.75, 0.95], dia);
+    const direcaoLuz = [Math.cos(anguloSol), Math.max(altura, 0.15), 0.4];
+    const corLuz = misturar([0.25, 0.3, 0.55], [1, 0.97, 0.9], dia);
+    const luzAmbiente = misturar([0.12, 0.14, 0.25], [0.55, 0.6, 0.75], dia);
+    const corCeu = misturar([0.03, 0.04, 0.1], [0.55, 0.75, 0.95], dia);
 
     twgl.resizeCanvasToDisplaySize(gl.canvas);
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
@@ -288,20 +399,35 @@ async function iniciar() {
     desenhar(formas.disco, m4.identity(), materiais.neve);
     desenhar(formas.hemisferio, m4.identity(), materiais.pokebola);
     
-    const p = poses[poseAtual];
-    let mamo = m4.translation([p.x, p.y, p.z]);
-    mamo = m4.rotateY(mamo, p.giroY);
-    mamo = m4.rotateZ(mamo, p.giroZ);
-    mamo = m4.scale(mamo, [1.2, 1.2, 1.2]);
-    desenharMamoswine(mamo);
+    if (poseAtual === 0) {
+      atualizarPasseio(Math.min(deltaTempo, 0.1));
+      const andando = passeio.estado === "wandering";
+      const quique = andando ? Math.abs(Math.sin(passeio.fase)) * 0.15 : 0;
+      const ginga = andando ? Math.sin(passeio.fase) * 0.05 : 0;
 
-    desenharPinheiro(-4, -2);
-    desenharPinheiro(3, -4);
-    desenharPinheiro(-2, 4);
-    desenharPedra(4, 2, 0.7);
-    desenharPedra(-5, 1, 0.5);
-    desenharBoneco(1, -5);
-    desenharMobile(5, -1, tempo);
+      let mMamo = m4.translation([passeio.x, quique, passeio.z]);
+      mMamo = m4.rotateY(mMamo, passeio.giro);
+      mMamo = m4.rotateZ(mMamo, ginga);
+      mMamo = m4.scale(mMamo, [1.2, 1.2, 1.2]);
+      desenharMamoswine(mMamo);
+    } else {
+      const p = poses[poseAtual];
+      let mMamo = m4.translation([p.x, p.y, p.z]);
+      mMamo = m4.rotateY(mMamo, p.giroY);
+      mMamo = m4.rotateZ(mMamo, p.giroZ);
+      mMamo = m4.scale(mMamo, [1.2, 1.2, 1.2]);
+      desenharMamoswine(mMamo);
+    }
+
+    desenharPinheiro(5.5, -5.5);
+    desenharPinheiro(7.2, -3.2);
+    desenharPinheiro(3.8, -7.2);
+    desenharPedra(-7.5, 2.5, 0.8);
+    desenharPedra(-6.2, 4.5, 0.6);
+    desenharPedra(-8, 0.5, 0.5);
+    desenharBoneco(2.5, 7);
+    desenharMobile(7, 2.5, tempo);
+    desenharIglu(-6, -4.5, 1.8);
 
     requestAnimationFrame(loop);
   }
