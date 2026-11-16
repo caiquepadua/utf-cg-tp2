@@ -26,7 +26,7 @@ let cameraAtiva = 1;
 
 const poses = [
   { x: 0,    y: 0,   z: 0,    giroY: 0,            giroZ: 0 },            // inicial: no centro
-    { x: 0, y: 0, z: -6.5,    giroY: Math.PI,      giroZ: 0 },            // na borda, olhando pra fora
+  { x: 0, y: 0, z: -6.5,    giroY: Math.PI,      giroZ: 0 },              // na borda, olhando pra fora
   { x: 0,    y: 1.8, z: 0,    giroY: 0,            giroZ: Math.PI / 2 },  // deitado de lado, dormindo
 ];
 let poseAtual = 0;
@@ -138,15 +138,70 @@ function misturar(a, b, t) {
   return a.map((v, i) => v + (b[i] - v) * t);
 }
 
+const elementos = {
+  boasVindas: document.getElementById("boas-vindas"),
+  botaoEntrar: document.getElementById("botao-entrar"),
+  hud: document.getElementById("hud"),
+  relogio: document.getElementById("relogio"),
+  camera: document.getElementById("estado-camera"),
+  pose: document.getElementById("estado-pose"),
+  luz: document.getElementById("estado-luz"),
+  neblina: document.getElementById("estado-neblina"),
+  musica: document.getElementById("estado-musica"),
+};
+
+const NOMES_POSES = ["passeando", "na borda", "dormindo"];
+let entrou = false;
+
+const musica = new Audio("assets/sounds/musica.mp3");
+musica.loop = true;
+musica.volume = 0.3;
+let musicaLigada = false;
+
+function atualizarHud() {
+  elementos.camera.textContent = cameraAtiva === 1 ? "(automática)" : "(orbital)";
+  elementos.pose.textContent = `(${NOMES_POSES[poseAtual]})`;
+  elementos.luz.textContent = luzLigada ? "(ligada)" : "(desligada)";
+  elementos.neblina.textContent = neblinaLigada ? "(ligada)" : "(desligada)";
+  elementos.musica.textContent = musicaLigada ? "(tocando)" : "(pausada)";
+}
+
+function alternarMusica(ligar) {
+  musicaLigada = ligar;
+  if (ligar) {
+    musica.play().catch(() => {
+      musicaLigada = false;
+      atualizarHud();
+    });
+  } else {
+    musica.pause();
+  }
+  atualizarHud();
+}
+
+elementos.botaoEntrar.addEventListener("click", () => {
+  entrou = true;
+  elementos.boasVindas.classList.add("escondido");
+  elementos.hud.classList.remove("escondido");
+  alternarMusica(true);
+});
+
 window.addEventListener("keydown", (evento) => {
-  if (evento.key === "l" || evento.key === "L") luzLigada = !luzLigada;
-  if (evento.key === "1") cameraAtiva = 1;
-  if (evento.key === "2") cameraAtiva = 2;
-  if (evento.key === "p" || evento.key === "P") {
+  if (!entrou) return;
+  const tecla = evento.key.toLowerCase();
+
+  if (tecla === "l") luzLigada = !luzLigada;
+  if (tecla === "1") cameraAtiva = 1;
+  if (tecla === "2") cameraAtiva = 2;
+  if (tecla === "n") neblinaLigada = !neblinaLigada;
+  if (tecla === "m") alternarMusica(!musicaLigada);
+  if (tecla === "h") elementos.hud.classList.toggle("escondido");
+  if (tecla === "p") {
     poseAtual = (poseAtual + 1) % poses.length;
     if (poseAtual === 0) reiniciarPasseio();
   }
-  if (evento.key === "n" || evento.key === "N") neblinaLigada = !neblinaLigada;
+
+  atualizarHud();
 });
 
 let arrastando = false;
@@ -237,19 +292,6 @@ async function iniciar() {
       desenhar(partesMamo[nome], modelo, materiaisMamo[nome] || materiais.boneco);
     }
   }
-
-  const musica = new Audio("assets/sounds/musica.mp3");
-  musica.loop = true;
-  musica.volume = 0.3;
-
-  let musicaIniciada = false;
-  function iniciarMusica() {
-    if (musicaIniciada) return;
-    musicaIniciada = true;
-    musica.play().catch(() => { musicaIniciada = false; });
-  }
-  window.addEventListener("keydown", iniciarMusica);
-  window.addEventListener("mousedown", iniciarMusica);
 
   function desenhar(forma, modelo, mat) {
     twgl.setBuffersAndAttributes(gl, programInfo, forma);
@@ -365,6 +407,11 @@ async function iniciar() {
     const anguloSol = tempoDoDia * 2 * Math.PI;
     const altura = Math.sin(anguloSol);
     const dia = limitar(altura * 2 + 0.5, 0, 1);
+    const horas = (tempoDoDia * 24 + 6) % 24;
+    const h = Math.floor(horas);
+    const min = Math.floor((horas - h) * 60);
+    const textoRelogio = `${dia > 0.5 ? "☀️" : "🌙"} ${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+    if (elementos.relogio.textContent !== textoRelogio) elementos.relogio.textContent = textoRelogio;
 
     const direcaoLuz = [Math.cos(anguloSol), Math.max(altura, 0.15), 0.4];
     const corLuz = misturar([0.25, 0.3, 0.55], [1, 0.97, 0.9], dia);
@@ -433,6 +480,7 @@ async function iniciar() {
   }
 
   requestAnimationFrame(loop);
+  atualizarHud();
 }
 
 iniciar();

@@ -8,6 +8,29 @@
 </head>
 <body>
   <canvas id="canvas"></canvas>
+
+  <div id="boas-vindas">
+    <div class="cartao">
+      <h1>Paraíso do Mamoswine</h1>
+      <p>Bem-vindo ao refúgio de inverno dentro da pokébola. Explore a ilha, acompanhe o dia virar noite e veja o Mamoswine passear pela neve.</p>
+      <button id="botao-entrar">Entrar</button>
+    </div>
+  </div>
+
+  <div id="hud" class="escondido">
+    <div id="relogio"></div>
+    <ul id="teclas">
+      <li><kbd>1</kbd><kbd>2</kbd> Câmera <span id="estado-camera"></span></li>
+      <li><kbd>Scroll</kbd> Zoom</li>
+      <li><kbd>Arrastar</kbd> Girar (câmera 2)</li>
+      <li><kbd>P</kbd> Pose <span id="estado-pose"></span></li>
+      <li><kbd>L</kbd> Luz <span id="estado-luz"></span></li>
+      <li><kbd>N</kbd> Neblina <span id="estado-neblina"></span></li>
+      <li><kbd>M</kbd> Música <span id="estado-musica"></span></li>
+      <li><kbd>H</kbd> Esconder painel</li>
+    </ul>
+  </div>
+
   <script type="module" src="js/main.js"></script>
 </body>
 </html>
