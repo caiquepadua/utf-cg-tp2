@@ -30,6 +30,10 @@ const poses = [
 ];
 let poseAtual = 0;
 
+let neblinaLigada = false;
+const DURACAO_DIA = 40; // segundos para um dia completo
+let tempoDoDia = 0.2;   // 0 a 1
+
 const cameras = {
   1: { azimute: 0, elevacao: Math.PI / 4, distancia: 22 },
   2: { azimute: 0.8, elevacao: 0.6, distancia: 22 },
@@ -48,11 +52,16 @@ function posicaoDaCamera(cam) {
   ];
 }
 
+function misturar(a, b, t) {
+  return a.map((v, i) => v + (b[i] - v) * t);
+}
+
 window.addEventListener("keydown", (evento) => {
   if (evento.key === "l" || evento.key === "L") luzLigada = !luzLigada;
   if (evento.key === "1") cameraAtiva = 1;
   if (evento.key === "2") cameraAtiva = 2;
   if (evento.key === "p" || evento.key === "P") poseAtual = (poseAtual + 1) % poses.length;
+  if (evento.key === "n" || evento.key === "N") neblinaLigada = !neblinaLigada;
 });
 
 let arrastando = false;
@@ -138,6 +147,19 @@ async function iniciar() {
       desenhar(partesMamo[nome], modelo, materiaisMamo[nome] || materiais.boneco);
     }
   }
+
+  const musica = new Audio("assets/sounds/musica.mp3");
+  musica.loop = true;
+  musica.volume = 0.3;
+
+  let musicaIniciada = false;
+  function iniciarMusica() {
+    if (musicaIniciada) return;
+    musicaIniciada = true;
+    musica.play().catch(() => { musicaIniciada = false; });
+  }
+  window.addEventListener("keydown", iniciarMusica);
+  window.addEventListener("mousedown", iniciarMusica);
 
   function desenhar(forma, modelo, mat) {
     twgl.setBuffersAndAttributes(gl, programInfo, forma);
@@ -228,9 +250,19 @@ async function iniciar() {
 
     cameras[1].azimute += deltaTempo * 0.3;
 
+  tempoDoDia = (tempoDoDia + deltaTempo / DURACAO_DIA) % 1;
+  const anguloSol = tempoDoDia * 2 * Math.PI;
+  const altura = Math.sin(anguloSol);
+  const dia = limitar(altura * 2 + 0.5, 0, 1);
+
+  const direcaoLuz = [Math.cos(anguloSol), Math.max(altura, 0.15), 0.4];
+  const corLuz = misturar([0.25, 0.3, 0.55], [1, 0.97, 0.9], dia);
+  const luzAmbiente = misturar([0.12, 0.14, 0.25], [0.55, 0.6, 0.75], dia);
+  const corCeu = misturar([0.03, 0.04, 0.1], [0.55, 0.75, 0.95], dia);
+
     twgl.resizeCanvasToDisplaySize(gl.canvas);
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-    gl.clearColor(0.1, 0.1, 0.15, 1);
+    gl.clearColor(corCeu[0], corCeu[1], corCeu[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     const aspecto = gl.canvas.width / gl.canvas.height;
@@ -244,9 +276,12 @@ async function iniciar() {
     twgl.setUniforms(programInfo, {
       u_viewProjecao: viewProjecao,
       u_posicaoCamera: posicaoCamera,
-      u_direcaoParaLuz: [0.5, 1, 0.6],
-      u_corLuz: [1, 0.97, 0.9],
-      u_luzAmbiente: [0.55, 0.6, 0.75],
+      u_direcaoParaLuz: direcaoLuz,
+      u_corLuz: corLuz,
+      u_luzAmbiente: luzAmbiente,
+      u_neblinaLigada: neblinaLigada,
+      u_corNeblina: corCeu,
+      u_densidadeNeblina: 0.03,
       u_luzLigada: luzLigada,
     });
 
